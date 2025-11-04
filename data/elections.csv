@@ -1,12 +1,13 @@
-country,election_name,election_date,notes
-US,Presidential,1980-11-04,Reagan vs Carter
-US,Presidential,1984-11-06,Reagan vs Mondale
-US,Presidential,1988-11-08,Bush vs Dukakis
-US,Presidential,1992-11-03,Clinton vs Bush
-US,Presidential,1996-11-05,Clinton vs Dole
-US,Presidential,2000-11-07,Bush vs Gore
-US,Presidential,2004-11-02,Bush vs Kerry
-US,Presidential,2008-11-04,Obama vs McCain
-US,Presidential,2012-11-06,Obama vs Romney
-US,Presidential,2016-11-08,Trump vs Clinton
-US,Presidential,2020-11-03,Biden vs Trump
+country,election_name,election_date,notes,winner,party
+US,Presidential,1980-11-04,Reagan vs Carter,Ronald Reagan,Republican
+US,Presidential,1984-11-06,Reagan vs Mondale,Ronald Reagan,Republican
+US,Presidential,1988-11-08,Bush vs Dukakis,George H. W. Bush,Republican
+US,Presidential,1992-11-03,Clinton vs Bush,Bill Clinton,Democrat
+US,Presidential,1996-11-05,Clinton vs Dole,Bill Clinton,Democrat
+US,Presidential,2000-11-07,Bush vs Gore,George W. Bush,Republican
+US,Presidential,2004-11-02,Bush vs Kerry,George W. Bush,Republican
+US,Presidential,2008-11-04,Obama vs McCain,Barack Obama,Democrat
+US,Presidential,2012-11-06,Obama vs Romney,Barack Obama,Democrat
+US,Presidential,2016-11-08,Trump vs Clinton,Donald Trump,Republican
+US,Presidential,2020-11-03,Biden vs Trump,Joe Biden,Democrat
+
