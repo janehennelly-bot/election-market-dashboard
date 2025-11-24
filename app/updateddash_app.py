@@ -179,14 +179,38 @@ def build_election_summary(
 
 def safe_mean(series):
     s = pd.to_numeric(series, errors="coerce").dropna()
-    return float(s.mean()) if len(s) else None
+    return float(s.mean()) if len(s) else None 
+
+def kpi_block(label, value_str, delta_str=None, color="#000000"):
+    """KPI box with fixed custom colours."""
+    return html.Div(
+        [
+            html.Div(label, style={"fontSize": "0.8rem", "opacity": 0.8}),
+            html.Div(
+                value_str,
+                style={
+                    "fontSize": "1.6rem",
+                    "fontWeight": "bold",
+                    "color": color,       # main KPI colour
+                },
+            ),
+            html.Div(
+                delta_str if delta_str is not None else "",
+                style={
+                    "fontSize": "0.8rem",
+                    "color": color,       # delta text uses same colour
+                    "marginTop": "4px",
+                },
+            ),
+        ]
+    )
 
 
 # Layout
 app.layout = html.Div(
     style={
-        "backgroundColor": "#0e1117",
-        "color": "#f0f0f0",
+        "backgroundColor": "#ffffff",  
+        "color": "#000000",             
         "minHeight": "100vh",
         "padding": "20px 40px",
         "fontFamily": "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI'",
@@ -209,7 +233,7 @@ app.layout = html.Div(
                     style={
                         "minWidth": "260px",
                         "maxWidth": "300px",
-                        "backgroundColor": "#161a23",
+                        "backgroundColor": "#f7f7f7",   
                         "padding": "20px",
                         "borderRadius": "10px",
                     },
@@ -227,20 +251,8 @@ app.layout = html.Div(
                             value="^GSPC",
                             clearable=False,
                             style={"color": "#000000"},
-                        ),
-                        html.Br(),
-                        html.H4(
-                            "Years of history",
-                            style={"fontSize": "0.9rem", "marginBottom": "0"},
-                        ),
-                        dcc.Slider(
-                            id="years-slider",
-                            min=5,
-                            max=40,
-                            step=1,
-                            value=25,
-                            marks={i: str(i) for i in range(5, 41, 5)},
-                        ),
+                        ), 
+
                     ],
                 ),
             ],
@@ -260,7 +272,7 @@ app.layout = html.Div(
                     id="kpi-pre",
                     style={
                         "flex": "1 1 200px",
-                        "backgroundColor": "#161a23",
+                        "backgroundColor": "#f7f7f7",
                         "padding": "15px 20px",
                         "borderRadius": "10px",
                     },
@@ -269,7 +281,7 @@ app.layout = html.Div(
                     id="kpi-post30",
                     style={
                         "flex": "1 1 200px",
-                        "backgroundColor": "#161a23",
+                        "backgroundColor": "#f7f7f7",
                         "padding": "15px 20px",
                         "borderRadius": "10px",
                     },
@@ -278,7 +290,7 @@ app.layout = html.Div(
                     id="kpi-post1y",
                     style={
                         "flex": "1 1 200px",
-                        "backgroundColor": "#161a23",
+                        "backgroundColor": "#f7f7f7",
                         "padding": "15px 20px",
                         "borderRadius": "10px",
                     },
@@ -287,7 +299,7 @@ app.layout = html.Div(
                     id="kpi-vol",
                     style={
                         "flex": "1 1 200px",
-                        "backgroundColor": "#161a23",
+                        "backgroundColor": "#f7f7f7",
                         "padding": "15px 20px",
                         "borderRadius": "10px",
                     },
@@ -373,14 +385,14 @@ app.layout = html.Div(
     Output("event-study-graph", "figure"),
     Output("party-graph", "figure"),
     Input("symbol-dropdown", "value"),
-    Input("years-slider", "value"),
     Input("highlight-dropdown", "value"),
 )
-def update_dashboard(symbol, years_back, highlight_value):
+def update_dashboard(symbol, highlight_value):
+
     global px_idx
 
     # Prices
-    prices = load_prices(symbol, years_back)
+    prices = load_prices(symbol, 40)
     prices = prices[["Date", "Close"]].dropna().sort_values("Date").reset_index(
         drop=True
     )
@@ -396,55 +408,33 @@ def update_dashboard(symbol, years_back, highlight_value):
     avg_1y = safe_mean(summary_df["1y After"])
     avg_vol_change = safe_mean(summary_df["Vol Δ (pp)"])
 
-    def kpi_block(label, value_str, delta_str=None, delta_positive=True):
-        color = "#21ba45" if delta_positive else "#db2828"
-        return html.Div(
-            [
-                html.Div(label, style={"fontSize": "0.8rem", "opacity": 0.8}),
-                html.Div(
-                    value_str,
-                    style={"fontSize": "1.6rem", "fontWeight": "bold"},
-                ),
-                html.Div(
-                    delta_str if delta_str is not None else "",
-                    style={
-                        "fontSize": "0.8rem",
-                        "color": color,
-                        "marginTop": "4px",
-                    },
-                ),
-            ]
-        )
-
-    # KPI content
+        # KPI content
     kpi_pre = kpi_block(
         "Avg 30 Days Before Election",
         f"{avg_pre:.2f}%" if avg_pre is not None else "N/A",
         delta_str=(f"{-avg_pre:.2f}% (Vol Change)" if avg_pre is not None else None),
-        delta_positive=(avg_pre is not None and avg_pre < 0),
+        color="#1f77b4",  # BLUE
     )
 
     kpi_post30 = kpi_block(
         "Avg 30 Days After Election",
         f"{avg_post:.2f}%" if avg_post is not None else "N/A",
         delta_str=(f"{avg_post:.2f}%" if avg_post is not None else None),
-        delta_positive=(avg_post is not None and avg_post > 0),
+        color="#21ba45",  # GREEN
     )
 
     kpi_post1y = kpi_block(
         "Avg 1-Year After Election",
         f"{avg_1y:.2f}%" if avg_1y is not None else "N/A",
         delta_str=(f"{avg_1y:.2f}%" if avg_1y is not None else None),
-        delta_positive=(avg_1y is not None and avg_1y > 0),
+        color="#ff7f0e",  # ORANGE
     )
 
     kpi_vol = kpi_block(
         "Avg Volatility Change",
         f"{avg_vol_change:.2f} pp" if avg_vol_change is not None else "N/A",
-        delta_str=(
-            f"{avg_vol_change:.2f} pp" if avg_vol_change is not None else None
-        ),
-        delta_positive=(avg_vol_change is not None and avg_vol_change <= 0),
+        delta_str=(f"{avg_vol_change:.2f} pp" if avg_vol_change is not None else None),
+        color="#d62728",  # RED
     )
 
     # Highlight dropdown options
@@ -533,9 +523,9 @@ def update_dashboard(symbol, years_back, highlight_value):
         xaxis_title="Trading Days from Election",
         yaxis_title="Average % Change (Cumulative)",
         hovermode="x unified",
-        template="plotly_dark",
-        paper_bgcolor="#0e1117",
-        plot_bgcolor="#0e1117",
+        template="plotly_white",
+        paper_bgcolor="#ffffff",
+        plot_bgcolor="#ffffff",
         height=400,
         margin=dict(t=30, b=40, l=60, r=20),
     )
@@ -574,19 +564,19 @@ def update_dashboard(symbol, years_back, highlight_value):
                 "AvgReturn": "Average Return (%)",
                 "Window": "Window",
             },
-            template="plotly_dark",
+            template="plotly_white",
             height=340,
         )
         fig_party.update_layout(
-            paper_bgcolor="#0e1117",
-            plot_bgcolor="#0e1117",
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
             margin=dict(t=30, b=40, l=40, r=10),
         )
     else:
         fig_party = go.Figure()
         fig_party.update_layout(
-            paper_bgcolor="#0e1117",
-            plot_bgcolor="#0e1117",
+            paper_bgcolor="#ffffff",
+            plot_bgcolor="#ffffff",
             annotations=[
                 dict(
                     text="Missing Party data in elections.csv",
@@ -595,7 +585,7 @@ def update_dashboard(symbol, years_back, highlight_value):
                     xref="paper",
                     yref="paper",
                     showarrow=False,
-                    font=dict(color="white"),
+                    font=dict(color="black"),
                 )
             ],
         )
