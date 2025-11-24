@@ -7,12 +7,11 @@ import yfinance as yf
 import plotly.graph_objects as go
 import plotly.express as px
 
-from dash import Dash, dcc, html, dash_table, Input, Output
+from dash import Dash, dcc, html, Input, Output
 
 # Basic app setup
-
 app = Dash(__name__)
-server = app.server  
+server = app.server
 
 app.title = "Elections & the S&P 500: Minimal MVP"
 
@@ -20,7 +19,7 @@ app.title = "Elections & the S&P 500: Minimal MVP"
 BASE_PATH = pathlib.Path(__file__).resolve().parent.parent
 ELECTIONS_PATH = BASE_PATH / "data" / "elections.csv"
 
-# Sector & Index Tickers 
+# Sector & Index Tickers
 SECTOR_MAP = {
     "S&P 500 (Broad Index)": "^GSPC",
     "Dow Jones (30 Stocks)": "^DJI",
@@ -32,7 +31,7 @@ SECTOR_MAP = {
     "Real Estate (XLRE)": "XLRE",
 }
 
-# Elections data 
+# Elections data
 elections = pd.read_csv(ELECTIONS_PATH, parse_dates=["election_date"]).sort_values(
     "election_date"
 )
@@ -59,7 +58,7 @@ px_idx = None
 @lru_cache(maxsize=16)
 def load_prices(sym: str, years: int) -> pd.DataFrame:
     """
-    Mirror Streamlit behavior: fetch up to `years` of daily prices, auto-adjusted.
+    Fetch up to `years` of daily prices, auto-adjusted.
     Cached so we don't hammer yfinance on every callback.
     """
     hist = yf.Ticker(sym).history(
@@ -108,7 +107,6 @@ def build_election_summary(
 ) -> pd.DataFrame:
     """
     Per-election summary: 30d before, 30d after, 1y after, and volatility change.
-    Mirrors your Streamlit logic.
     """
     rows = []
     for _, r in elections_df.iterrows():
@@ -122,9 +120,9 @@ def build_election_summary(
         p_after = value_shifted(d, window_post)
         p_1y = value_shifted(d, window_1y)
 
-        pre_30 = pct_change(p_before, p_at)  # % move into election
-        post_30 = pct_change(p_at, p_after)  # % move after election
-        post_1y = pct_change(p_at, p_1y)  # % over 1y after
+        pre_30 = pct_change(p_before, p_at)   # % move into election
+        post_30 = pct_change(p_at, p_after)   # % move after election
+        post_1y = pct_change(p_at, p_1y)      # % over 1y after
 
         # Volatility: stdev of daily returns before vs after (± vol_window)
         try:
@@ -132,9 +130,7 @@ def build_election_summary(
             center_idx = px_idx.index.get_loc(center)
 
             pre_slice = (
-                px_idx.iloc[max(0, center_idx - vol_window) : center_idx + 1][
-                    "Close"
-                ]
+                px_idx.iloc[max(0, center_idx - vol_window) : center_idx + 1]["Close"]
                 .pct_change()
                 .dropna()
             )
@@ -181,96 +177,9 @@ def build_election_summary(
     return pd.DataFrame(rows)
 
 
-def build_presidential_cycle(prices: pd.DataFrame, elections_df: pd.DataFrame):
-    """
-    Your four-year presidential cycle logic, using trading-day counts.
-    """
-    cycle_map = {}
-
-    for i in range(len(elections_df) - 1, -1, -1):
-        d_start = elections_df.iloc[i]["election_date"]
-        d_end = (
-            elections_df.iloc[i + 1]["election_date"]
-            if i + 1 < len(elections_df)
-            else pd.to_datetime("2028-11-01")
-        )
-
-        current_term_prices = prices[
-            (prices["Date"] >= d_start) & (prices["Date"] < d_end)
-        ].copy()
-
-        start_idx_list = prices.index[prices["Date"] == nearest_trade_day(d_start)]
-        if not len(start_idx_list):
-            continue
-        start_idx = start_idx_list.tolist()[0]
-
-        for _, row in current_term_prices.iterrows():
-            pos_list = prices.index[prices["Date"] == row["Date"]]
-            if not len(pos_list):
-                continue
-            pos_in_full_prices = pos_list.tolist()[0]
-            trading_day_of_term = pos_in_full_prices - start_idx
-
-            pres_year = min(4, int(trading_day_of_term // 252) + 1)
-            cycle_map[row["Date"]] = pres_year
-
-    cycle_df = prices.copy()
-    cycle_df["PresidentialYear"] = (
-        cycle_df["Date"].map(cycle_map).fillna(method="ffill").fillna(method="bfill")
-    )
-    cycle_df = cycle_df.dropna(subset=["PresidentialYear"])
-    cycle_df["PresidentialYear"] = cycle_df["PresidentialYear"].astype(int).astype(str)
-
-    cycle_df["DailyReturn"] = cycle_df["Close"].pct_change()
-
-    yearly_returns = (
-        cycle_df.groupby(["PresidentialYear", cycle_df["Date"].dt.year])["DailyReturn"]
-        .sum()
-        .reset_index()
-    )
-    avg_annual_returns = yearly_returns.groupby("PresidentialYear")[
-        "DailyReturn"
-    ].mean() * 100
-
-    return (
-        avg_annual_returns.reset_index().rename(
-            columns={"DailyReturn": "Average Annual Return (%)"}
-        )
-    )
-
-
 def safe_mean(series):
     s = pd.to_numeric(series, errors="coerce").dropna()
     return float(s.mean()) if len(s) else None
-
-
-def color_for_vol_delta(v):
-    """
-    Approximate RdYlGn for Vol Δ (pp) in [-10, 10].
-    Negative = greener, positive = redder.
-    """
-    if v is None or np.isnan(v):
-        return "#000000"
-
-    v = max(-10, min(10, v))
-    # normalize to [0,1], where 0 -> green, 1 -> red
-    t = (v + 10) / 20.0
-
-    # 3-stop scale: green -> yellow -> red
-    if t < 0.5:
-        # green (0, 128, 0) to yellow (255, 255, 0)
-        ratio = t / 0.5
-        r = int(0 + ratio * (255 - 0))
-        g = int(128 + ratio * (255 - 128))
-        b = 0
-    else:
-        # yellow (255,255,0) to red (255,0,0)
-        ratio = (t - 0.5) / 0.5
-        r = 255
-        g = int(255 - ratio * 255)
-        b = 0
-
-    return f"rgb({r},{g},{b})"
 
 
 # Layout
@@ -410,7 +319,7 @@ app.layout = html.Div(
                 html.Div(
                     style={"flex": "2 1 520px"},
                     children=[
-                        html.H3("📈 Average Return Path Around Elections"),
+                        html.H3("Average Return Path Around Elections"),
                         dcc.Graph(
                             id="event-study-graph",
                             style={"height": "430px"},
@@ -426,9 +335,9 @@ app.layout = html.Div(
                             value="party",
                             children=[
                                 dcc.Tab(
-                                    label="🟥 Party Comparison",
+                                    label="Party Comparison",
                                     value="party",
-                                    children=[
+                                    children=[  
                                         html.Div(
                                             style={"padding": "10px"},
                                             children=[
@@ -444,64 +353,11 @@ app.layout = html.Div(
                                         )
                                     ],
                                 ),
-                                dcc.Tab(
-                                    label="📅 Presidential Cycle",
-                                    value="cycle",
-                                    children=[
-                                        html.Div(
-                                            style={"padding": "10px"},
-                                            children=[
-                                                html.Small(
-                                                    "Average Annualized Return by Presidential Term Year (Years 1–4)"
-                                                ),
-                                                dcc.Graph(
-                                                    id="cycle-graph",
-                                                    style={"height": "340px"},
-                                                    config={"displaylogo": False},
-                                                ),
-                                            ],
-                                        )
-                                    ],
-                                ),
                             ],
                         )
                     ],
                 ),
             ],
-        ),
-        html.Hr(style={"borderColor": "#333", "marginTop": "25px"}),
-        html.H3("🧾 Per-Election Summary Table (Including Volatility)"),
-        dash_table.DataTable(
-            id="summary-table",
-            columns=[
-                {"name": "Election", "id": "Election"},
-                {"name": "Winner", "id": "Winner"},
-                {"name": "Party", "id": "Party"},
-                {"name": "30d Before", "id": "30d Before"},
-                {"name": "30d After", "id": "30d After"},
-                {"name": "1y After", "id": "1y After"},
-                {"name": "Vol Pre (ann%)", "id": "Vol Pre (ann%)"},
-                {"name": "Vol Post (ann%)", "id": "Vol Post (ann%)"},
-                {"name": "Vol Δ (pp)", "id": "Vol Δ (pp)"},
-            ],
-            data=[],
-            style_as_list_view=True,
-            sort_action="native",
-            page_size=20,
-            style_header={
-                "backgroundColor": "#11141c",
-                "color": "#f0f0f0",
-                "fontWeight": "600",
-                "border": "1px solid #333",
-            },
-            style_cell={
-                "backgroundColor": "#0e1117",
-                "color": "#f0f0f0",
-                "border": "1px solid #222",
-                "padding": "6px 8px",
-                "fontSize": "13px",
-            },
-            style_data_conditional=[],
         ),
     ],
 )
@@ -516,9 +372,6 @@ app.layout = html.Div(
     Output("highlight-dropdown", "options"),
     Output("event-study-graph", "figure"),
     Output("party-graph", "figure"),
-    Output("cycle-graph", "figure"),
-    Output("summary-table", "data"),
-    Output("summary-table", "style_data_conditional"),
     Input("symbol-dropdown", "value"),
     Input("years-slider", "value"),
     Input("highlight-dropdown", "value"),
@@ -532,7 +385,7 @@ def update_dashboard(symbol, years_back, highlight_value):
         drop=True
     )
 
-    # Index by Date for fast lookup 
+    # Index by Date for fast lookup
     px_idx = prices.set_index("Date").sort_index()
 
     # Summary DF & KPIs
@@ -563,13 +416,11 @@ def update_dashboard(symbol, years_back, highlight_value):
             ]
         )
 
-    # KPI content (text + simple delta color)
+    # KPI content
     kpi_pre = kpi_block(
         "Avg 30 Days Before Election",
         f"{avg_pre:.2f}%" if avg_pre is not None else "N/A",
-        delta_str=(
-            f"{-avg_pre:.2f}% (Vol Change)" if avg_pre is not None else None
-        ),
+        delta_str=(f"{-avg_pre:.2f}% (Vol Change)" if avg_pre is not None else None),
         delta_positive=(avg_pre is not None and avg_pre < 0),
     )
 
@@ -593,7 +444,6 @@ def update_dashboard(symbol, years_back, highlight_value):
         delta_str=(
             f"{avg_vol_change:.2f} pp" if avg_vol_change is not None else None
         ),
-        # Higher vol_change => worse (red)
         delta_positive=(avg_vol_change is not None and avg_vol_change <= 0),
     )
 
@@ -605,7 +455,6 @@ def update_dashboard(symbol, years_back, highlight_value):
         for d in summary_df["Election"].astype(str).tolist()
     ]
 
-    # Normalized highlight selection
     highlighted_date_str = (
         None if highlight_value in (None, "", "NONE") else str(highlight_value)
     )
@@ -650,7 +499,7 @@ def update_dashboard(symbol, years_back, highlight_value):
                 & (group["TradingDaysFromElection"] <= 90)
             ]
             date_str = str(date)
-            is_highlighted = (highlighted_date_str == date_str)
+            is_highlighted = highlighted_date_str == date_str
 
             line_color = "orange" if is_highlighted else "rgba(66,133,244,0.25)"
             line_width = 3 if is_highlighted else 1
@@ -679,12 +528,7 @@ def update_dashboard(symbol, years_back, highlight_value):
             )
         )
 
-    fig_ev.add_vline(
-        x=0,
-        line_width=2,
-        line_dash="dash",
-        line_color="red",
-    )
+    fig_ev.add_vline(x=0, line_width=2, line_dash="dash", line_color="red")
     fig_ev.update_layout(
         xaxis_title="Trading Days from Election",
         yaxis_title="Average % Change (Cumulative)",
@@ -756,92 +600,6 @@ def update_dashboard(symbol, years_back, highlight_value):
             ],
         )
 
-    # Presidential cycle chart
-    cycle_returns_df = build_presidential_cycle(prices, elections)
-
-    fig_cycle = px.bar(
-        cycle_returns_df,
-        x="PresidentialYear",
-        y="Average Annual Return (%)",
-        labels={
-            "PresidentialYear": "Presidential Year",
-            "Average Annual Return (%)": "Avg. Annual Return (%)",
-        },
-        color="PresidentialYear",
-        template="plotly_dark",
-        height=340,
-    )
-    fig_cycle.update_layout(
-        showlegend=False,
-        paper_bgcolor="#0e1117",
-        plot_bgcolor="#0e1117",
-        margin=dict(t=30, b=40, l=40, r=10),
-        title_text="The Four-Year Cycle",
-        title_font_size=16,
-    )
-
-    # Summary table: formatted strings and row coloring
-    show_cols = [
-        "Election",
-        "Winner",
-        "Party",
-        "30d Before",
-        "30d After",
-        "1y After",
-        "Vol Pre (ann%)",
-        "Vol Post (ann%)",
-        "Vol Δ (pp)",
-    ]
-
-    display_df = summary_df[show_cols].sort_values("Election", ascending=False).copy()
-
-    # keep numeric copy for coloring
-    num_vol_delta = display_df["Vol Δ (pp)"].values
-
-    # Format numbers as strings
-    def fmt_pct(x):
-        return "None" if x is None or pd.isna(x) else f"{x:.2f}%"
-
-    def fmt_plain(x):
-        return "None" if x is None or pd.isna(x) else f"{x:.2f}"
-
-    display_df["30d Before"] = display_df["30d Before"].apply(fmt_pct)
-    display_df["30d After"] = display_df["30d After"].apply(fmt_pct)
-    display_df["1y After"] = display_df["1y After"].apply(fmt_pct)
-    display_df["Vol Pre (ann%)"] = display_df["Vol Pre (ann%)"].apply(fmt_plain)
-    display_df["Vol Post (ann%)"] = display_df["Vol Post (ann%)"].apply(fmt_plain)
-    display_df["Vol Δ (pp)"] = display_df["Vol Δ (pp)"].apply(
-        lambda x: "None" if x is None or pd.isna(x) else f"{x:+.2f}"
-    )
-
-    table_data = display_df.to_dict("records")
-
-    # style_data_conditional for heatmap + row highlight
-    styles = []
-
-    # Vol Δ heat colors
-    for i, v in enumerate(num_vol_delta):
-        color = color_for_vol_delta(v) if v is not None and not pd.isna(v) else None
-        if color:
-            styles.append(
-                {
-                    "if": {"row_index": i, "column_id": "Vol Δ (pp)"},
-                    "backgroundColor": color,
-                    "color": "#000000",
-                }
-            )
-
-    # Row highlight based on selection
-    if highlighted_date_str is not None:
-        for i, rec in enumerate(table_data):
-            if str(rec["Election"]) == highlighted_date_str:
-                styles.append(
-                    {
-                        "if": {"row_index": i},
-                        "backgroundColor": "#555500",
-                    }
-                )
-
     return (
         kpi_pre,
         kpi_post30,
@@ -850,9 +608,6 @@ def update_dashboard(symbol, years_back, highlight_value):
         election_options,
         fig_ev,
         fig_party,
-        fig_cycle,
-        table_data,
-        styles,
     )
 
 
