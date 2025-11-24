@@ -7,7 +7,7 @@ It uses historical price data from **Yahoo Finance** and overlays election dates
 
 ## Features
 
-- Interactive **Streamlit dashboard**.
+- Interactive **Dash dashboard**.
 - Choice of index: S&P 500 (`^GSPC`), Dow Jones (`^DJI`), or NASDAQ (`^IXIC`).
 - Adjustable time range (5–40 years of history).
 - Vertical markers for every U.S. presidential election since 1980.
